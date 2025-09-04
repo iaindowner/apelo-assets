@@ -1,17 +1,17 @@
 // tagify-element.js
-
 class ApeloTagify extends HTMLElement {
   static get observedAttributes() {
-    // attributes you can set from Wix (stringified JSON)
     return ["issues", "placeholder"];
   }
 
   constructor() {
     super();
+
+    // defaults (overridable via attributes)
     this._issues = ["Green Belt","Heritage","Listed Building","Valued Landscape","Residential"];
     this._placeholder = "Type to search… (e.g., Green Belt, Heritage)";
 
-    // shadow DOM so styles don't leak
+    // Shadow DOM
     this.root = this.attachShadow({ mode: "open" });
 
     // host sizing
@@ -27,65 +27,96 @@ class ApeloTagify extends HTMLElement {
     `;
     this.root.appendChild(this.wrapper);
 
-    // styles (your CSS) + Tagify CSS link in shadow
+    // styles (copied from your working iframe version)
     const style = document.createElement("style");
     style.textContent = `
       :host { display:block; width:100%; }
-      .search-shell { max-width:100%; margin:0; }
+      .search-shell { max-width:100%; margin:0 auto; }
       .label { font-size:14px; margin-bottom:8px; color:#6b7280; }
+
       .tagify {
-        --tag-padding:6px 8px;
+        --tag-padding: 6px 8px;
         --tags-border-color: rgba(0,0,0,.1);
         --tags-hover-border-color: rgba(0,0,0,.2);
-        --tag-bg:#f5f6fa; --tag-text-color:#111827;
-        --tag-remove-btn-bg:transparent; --tag-inset-shadow-size:0;
-        overflow:visible; position:relative; width:100%;
-        border-radius:10px; box-shadow:0 1px 2px rgba(0,0,0,.04);
+        --tag-bg: #f5f6fa;
+        --tag-text-color: #111827;
+        --tag-remove-btn-bg: transparent;
+        --tag-inset-shadow-size: 0;
+        overflow: visible;            /* <= important */
+        position: relative;           /* helps with stacking */
+        width: 100%;
+        border-radius: 10px;
+        box-shadow: 0 1px 2px rgba(0,0,0,.04);
       }
-      .tagify__tag.tag--issue { background:#eef7ff; color:#0a3d91; border-color:rgba(10,61,145,.15) }
-      .tagify__tag.tag--free  { background:#fff7ee; color:#8a3d00; border-color:rgba(138,61,0,.15) }
-      .tagify__tag .badge { font-size:10px; font-weight:700; padding:2px 6px; border-radius:999px; margin-left:6px; opacity:.85; }
-      .tagify__tag.tag--issue .badge { background:rgba(10,61,145,.12); color:#0a3d91; }
-      .tagify__tag.tag--free  .badge { background:rgba(138,61,0,.12); color:#8a3d00; }
+      .tagify__tag.tag--issue { background: #eef7ff; color: #0a3d91; border-color: rgba(10,61,145,.15); }
+      .tagify__tag.tag--free  { background: #fff7ee; color: #8a3d00; border-color: rgba(138,61,0,.15); }
+
+      .tagify__tag .badge {
+        font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 999px; margin-left: 6px; opacity: .85;
+      }
+      .tagify__tag.tag--issue .badge { background: rgba(10,61,145,.12); color: #0a3d91; }
+      .tagify__tag.tag--free  .badge { background: rgba(138,61,0,.12); color: #8a3d00; }
+
+      /* Make the OUTER container transparent and non-clipping */
       .tagify__dropdown {
-        margin-top:6px; border:0; border-radius:0; background:transparent;
-        overflow:visible; box-shadow:none; z-index:9999;
+        margin-top: 6px;             /* gap from input */
+        border: 0;                   /* no visible border here */
+        border-radius: 0;            /* radius handled by wrapper */
+        background: transparent;     /* let wrapper provide white bg */
+        overflow: visible;           /* don't clip the wrapper */
+        box-shadow: none;            /* shadow handled by wrapper */
+        z-index: 9999;
       }
+
+      /* Give the INNER wrapper the visual box */
       .tagify__dropdown__wrapper {
-        margin:0; padding-top:4px; background:#fff; border:1px solid #e5e7eb; border-radius:12px;
-        box-shadow:0 12px 24px rgba(0,0,0,.08); background-clip:padding-box; overflow:hidden;
+        margin: 0;                   /* ensure no negative overlap */
+        padding-top: 4px;            /* small breathing space for header */
+        background: #fff;            /* the white panel */
+        border: 1px solid #e5e7eb;   /* visible border */
+        border-radius: 12px;         /* rounded corners here */
+        box-shadow: 0 12px 24px rgba(0,0,0,.08);
+      background-clip: padding-box;
+        overflow: hidden;            /* clip children to the radius */
       }
-      .tagify__dropdown__itemsGroup { padding:6px 0 8px; }
+
+      .tagify__dropdown__itemsGroup { padding: 6px 0 8px; }
       .tagify__dropdown__itemsGroup::before {
         content: attr(data-title);
-        display:block; font-size:11px; font-weight:700; letter-spacing:.02em;
-        color:#4a5568; background:#f1f3f7; padding:6px 10px; margin:0 6px 6px; border-radius:8px;
+        display: block; font-size: 11px; font-weight: 700; letter-spacing: .02em;
+        color: #4a5568; background: #f1f3f7;
+        padding: 6px 10px; margin: 0 6px 6px; border-radius: 8px;
       }
-      .tagify__dropdown__item { display:grid; grid-template-columns:1fr auto; align-items:center; gap:8px; }
-      .tagify__dropdown__item .hint { font-size:11px; opacity:.65; }
-      .tagify__dropdown__item.free-suggestion strong { color:#8a3d00; }
-      .tagify__dropdown__item.free-suggestion .hint { color:#8a3d00; opacity:.85; }
+      .tagify__dropdown__item { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
+      .tagify__dropdown__item .hint { font-size: 11px; opacity: .65; }
+      .tagify__dropdown__item.free-suggestion strong { color: #8a3d00; }
+      .tagify__dropdown__item.free-suggestion .hint { color: #8a3d00; opacity: .85; }
+
       input#issueSearch { width:100%; box-sizing:border-box; }
     `;
+
+    // Tagify CSS (inside shadow)
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = "https://cdn.jsdelivr.net/npm/@yaireo/tagify/dist/tagify.css";
+
     this.root.appendChild(link);
     this.root.appendChild(style);
 
-    // Resize host to content (so Wix section can auto-fit)
+    // Resize host as content grows
     this.ro = new ResizeObserver(() => this.autoSize());
     this.ro.observe(this.wrapper);
   }
 
   async connectedCallback() {
     // apply placeholder
-    this.root.getElementById("issueSearch").setAttribute("placeholder", this._placeholder);
+    this.root.getElementById("issueSearch")
+      .setAttribute("placeholder", this._placeholder);
 
-    // load Tagify once
-await this.ensureScript("https://cdn.jsdelivr.net/npm/@yaireo/tagify/dist/tagify.min.js");
-      
-    // init Tagify with your behaviour
+    // load Tagify script once
+    await this.ensureScript("https://cdn.jsdelivr.net/npm/@yaireo/tagify/dist/tagify.min.js");
+
+    // init Tagify with same behavior as your working HTML
     this.initTagify();
     this.autoSize();
   }
@@ -97,9 +128,7 @@ await this.ensureScript("https://cdn.jsdelivr.net/npm/@yaireo/tagify/dist/tagify
   attributeChangedCallback(name, oldVal, newVal) {
     if (oldVal === newVal) return;
     if (name === "issues") {
-      try {
-        this._issues = JSON.parse(newVal);
-      } catch { /* ignore */ }
+      try { this._issues = JSON.parse(newVal); } catch {}
       if (this.tagify) {
         this.baseWhitelist = this._issues.map(n => ({ value:n, name:n, group:"Issues", type:"issue" }));
         this.refreshWhitelist("", { show:false });
@@ -113,7 +142,6 @@ await this.ensureScript("https://cdn.jsdelivr.net/npm/@yaireo/tagify/dist/tagify
   }
 
   autoSize() {
-    // Let the element’s height match its content
     const h = this.wrapper.scrollHeight;
     this.style.height = h + "px";
   }
@@ -144,11 +172,15 @@ await this.ensureScript("https://cdn.jsdelivr.net/npm/@yaireo/tagify/dist/tagify
       const cls    = isFree ? 'tag--free' : 'tag--issue';
       const badge  = isFree ? 'Free text' : 'Issue';
       const name   = tagData.name || tagData.value;
+
       return `
         <tag title="${name}" contenteditable="false" spellcheck="false" tabindex="-1"
              class="tagify__tag ${cls}" ${this.getAttributes(tagData)}>
           <x title="" class="tagify__tag__removeBtn" role="button" aria-label="remove tag"></x>
-          <div><span class="tagify__tag-text">${name}</span><span class="badge">${badge}</span></div>
+          <div>
+            <span class="tagify__tag-text">${name}</span>
+            <span class="badge">${badge}</span>
+          </div>
         </tag>`;
     };
 
@@ -159,7 +191,8 @@ await this.ensureScript("https://cdn.jsdelivr.net/npm/@yaireo/tagify/dist/tagify
       const hint   = isFree ? 'Free text search' : 'Planning issue';
       return `
         <div ${this.getAttributes(item)} class="${cls}" tabindex="0" role="option">
-          <strong>${main}</strong><span class="hint">${hint}</span>
+          <strong>${main}</strong>
+          <span class="hint">${hint}</span>
         </div>`;
     };
 
@@ -170,31 +203,30 @@ await this.ensureScript("https://cdn.jsdelivr.net/npm/@yaireo/tagify/dist/tagify
         : s;
 
     // base whitelist from attribute or default
-    this.baseWhitelist = (this._issues || []).map(n => ({ value:n, name:n, group:"Issues", type:"issue" }));
+    this.baseWhitelist = (this._issues || []).map(name => ({
+      value: name, name, group: "Issues", type: "issue"
+    }));
 
-   this.tagify = new window.Tagify(input, {
-  enforceWhitelist: false,
-  skipInvalid: true,
-  addTagOnBlur: false,
-  pasteAsTags: false,
-  delimiters: null,
-  tagTextProp: 'name',
-  dropdown: {
-    enabled: 0,
-    closeOnSelect: false,
-    maxItems: 50,
-    fuzzySearch: true,
-    highlightFirst: true,
-    searchKeys: ['name','value'],
+    this.tagify = new window.Tagify(input, {
+      enforceWhitelist: false,     // allow free text
+      skipInvalid: true,
+      addTagOnBlur: false,         // don't chip on blur
+      pasteAsTags: false,          // pasted text acts like typing
+      delimiters: null,            // don't split pasted text
+      tagTextProp: 'name',
+      dropdown: {
+        enabled: 0,
+        closeOnSelect: false,
+        maxItems: 50,
+        fuzzySearch: true,
+        highlightFirst: true,
+        searchKeys: ['name','value']
+      },
+      templates: { tag: tagTemplate, dropdownItem: dropdownItemTemplate },
+      whitelist: this.baseWhitelist
+    });
 
-    // NEW: keep dropdown inside the shadow root so it’s visible & styled
-    appendTarget: this.root
-  },
-  templates: { tag: tagTemplate, dropdownItem: dropdownItemTemplate },
-  whitelist: this.baseWhitelist
-});
-
-    // grouped dropdown renderer
+    // grouped dropdown renderer (same as working HTML)
     this.tagify.dropdown.createListHTML = (suggestionsList) => {
       const t = this.tagify;
       const grouped = suggestionsList.reduce((acc, s) => {
@@ -215,15 +247,19 @@ await this.ensureScript("https://cdn.jsdelivr.net/npm/@yaireo/tagify/dist/tagify
         .join('');
     };
 
-    // helpers
+    // helpers (same logic as your working HTML)
     this.buildSuggestions = (q) => {
       const query = (q || '').trim().toLowerCase();
       const base  = query
         ? this.baseWhitelist.filter(i => i.name.toLowerCase().includes(query))
         : this.baseWhitelist.slice();
+
       const hasExact = query && base.some(i => i.name.toLowerCase() === query);
       if (query && !hasExact) {
-        base.push({ value:q, name:`Search “${q}”`, raw:q, group:'Free text', type:'free', class:'free-suggestion' });
+        base.push({
+          value: q, name: `Search “${q}”`, raw: q,
+          group: 'Free text', type: 'free', class: 'free-suggestion'
+        });
       }
       return base;
     };
@@ -234,90 +270,109 @@ await this.ensureScript("https://cdn.jsdelivr.net/npm/@yaireo/tagify/dist/tagify
       if (show) this.tagify.dropdown.show(q);
     };
 
-    this.resetSuggestions = ({ open=false } = {}) => {
+    this.resetSuggestions = ({ open = false } = {}) => {
       if (typeof this.tagify.setInputValue === 'function') this.tagify.setInputValue('');
       if (this.tagify.DOM?.input) this.tagify.DOM.input.textContent = '';
+
       this.refreshWhitelist('', { show:false });
+
+      // (re)open only if the input is focused & requested
       const isFocused =
         document.activeElement === this.tagify.DOM.input ||
         this.tagify.DOM.scope.contains(document.activeElement);
-      if (open && isFocused) setTimeout(() => this.tagify.dropdown.show(''), 0);
-      else this.tagify.dropdown.hide();
+
+      if (open && isFocused) {
+        setTimeout(() => this.tagify.dropdown.show(''), 0);
+      } else {
+        this.tagify.dropdown.hide();
+      }
     };
 
     // semantics
     this.tagify.settings.transformTag = (tagData) => {
       const raw = (tagData.raw ?? tagData.value ?? tagData.name ?? '').toString().trim();
       const isExactIssue = (this._issues || []).some(n => n.toLowerCase() === raw.toLowerCase());
-      tagData.value = raw; tagData.name = raw; tagData.type = isExactIssue ? 'issue' : 'free'; tagData.free = !isExactIssue;
+      tagData.value = raw;
+      tagData.name  = raw;
+      tagData.type  = isExactIssue ? 'issue' : 'free';
+      tagData.free  = !isExactIssue;
     };
+
     this.tagify.settings.validate = () => true;
 
-    // events (same behaviour as your iframe version)
+    // EVENTS (mirror working HTML)
+
+    // input: live suggestions + free-text option
     this.tagify.on('input', (e) => {
       const q = (e.detail.value || '').trim();
-      this.refreshWhitelist(q, { show:true });
+      this.refreshWhitelist(q, { show: true });
       this.dispatchEvent(new CustomEvent('inputChange', { detail: { query:q }, bubbles:true }));
     });
-      
-      this.tagify.on('focus', () => {
-  const q = (this.tagify.DOM.input.textContent || '').trim();
-  this.refreshWhitelist(q, { show: true });
-});
 
+    // paste: behave like typing
     this.tagify.DOM.input.addEventListener('paste', (e) => {
       e.preventDefault();
       const text = (e.clipboardData || window.clipboardData).getData('text') || '';
       if (typeof this.tagify.setInputValue === 'function') this.tagify.setInputValue(text);
       else this.tagify.DOM.input.textContent = text;
-      this.tagify.DOM.input.dispatchEvent(new Event('input', { bubbles:true }));
-      this.refreshWhitelist(text, { show:true });
+      this.tagify.DOM.input.dispatchEvent(new Event('input', { bubbles: true }));
+      this.refreshWhitelist(text, { show: true });
     });
 
+    // enter: add as free/issue if nothing highlighted; keep dropdown open
     this.tagify.DOM.scope.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter' || e.isComposing) return;
+
       const hasHighlighted = !!this.root.querySelector('.tagify__dropdown__item--active');
       if (hasHighlighted) return;
+
       const raw = (this.tagify.DOM.input.textContent || '').trim();
       if (!raw) return;
+
       const isExactIssue = (this._issues || []).some(n => n.toLowerCase() === raw.toLowerCase());
       e.preventDefault();
-      this.tagify.addTags([{ value:raw, name:raw, type:isExactIssue ? 'issue' : 'free', free:!isExactIssue }]);
-      this.resetSuggestions({ open:true });
+      this.tagify.addTags([{ value: raw, name: raw, type: isExactIssue ? 'issue' : 'free', free: !isExactIssue }]);
+
+      this.resetSuggestions({ open: true });
     });
 
+    // dropdown select: normalize free-suggestion to clean free chip, then reset/open
     this.tagify.on('dropdown:select', (e) => {
       const item = e.detail.data || {};
       if (item.type === 'free') {
         const raw = item.raw || item.value || item.name || '';
         setTimeout(() => {
           const last = this.tagify.value[this.tagify.value.length - 1];
-          if (last) { last.value = raw; last.name = raw; last.type = 'free'; last.free = true; this.tagify.loadOriginalValues(this.tagify.value); }
-          this.resetSuggestions({ open:true });
+          if (last) {
+            last.value = raw;
+            last.name  = raw;
+            last.type  = 'free';
+            last.free  = true;
+            this.tagify.loadOriginalValues(this.tagify.value);
+          }
+          this.resetSuggestions({ open: true });
         }, 0);
       } else {
-        setTimeout(() => this.resetSuggestions({ open:true }), 0);
+        setTimeout(() => this.resetSuggestions({ open: true }), 0);
       }
     });
 
+    // blur: do not auto-chip; just reset the list
     this.tagify.on('blur', () => {
       const q = (this.tagify.DOM.input.textContent || '').trim();
       this.tagify.dropdown.hide();
-      this.refreshWhitelist(q, { show:false });
+      this.refreshWhitelist(q, { show: false });
     });
 
-    this.tagify.on('add', () => {
-      this.resetSuggestions({ open:true });
-      this.emitTags();
-    });
-    this.tagify.on('remove', () => {
-      this.resetSuggestions({ open:true });
-      this.emitTags();
-    });
+    // keep dropdown open after add/remove
+    this.tagify.on('add', () => this.resetSuggestions({ open: true }));
+    this.tagify.on('remove', () => this.resetSuggestions({ open: true }));
+
+    // initial size
+    this.autoSize();
   }
 
   emitTags() {
-    // dispatch current tags to Wix page code
     const value = (this.tagify?.value || []).map(t => ({ value:t.value, type:t.type }));
     this.dispatchEvent(new CustomEvent("tagsChange", { detail: { value }, bubbles:true }));
   }
