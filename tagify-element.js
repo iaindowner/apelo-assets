@@ -83,8 +83,8 @@ class ApeloTagify extends HTMLElement {
     this.root.getElementById("issueSearch").setAttribute("placeholder", this._placeholder);
 
     // load Tagify once
-    await this.ensureScript("https://cdn.jsdelivr.net/npm/@yaireo/tagify");
-
+await this.ensureScript("https://cdn.jsdelivr.net/npm/@yaireo/tagify/dist/tagify.min.js");
+      
     // init Tagify with your behaviour
     this.initTagify();
     this.autoSize();
@@ -172,24 +172,27 @@ class ApeloTagify extends HTMLElement {
     // base whitelist from attribute or default
     this.baseWhitelist = (this._issues || []).map(n => ({ value:n, name:n, group:"Issues", type:"issue" }));
 
-    this.tagify = new window.Tagify(input, {
-      enforceWhitelist: false,
-      skipInvalid: true,
-      addTagOnBlur: false,
-      pasteAsTags: false,
-      delimiters: null,
-      tagTextProp: 'name',
-      dropdown: {
-        enabled: 0,
-        closeOnSelect: false,
-        maxItems: 50,
-        fuzzySearch: true,
-        highlightFirst: true,
-        searchKeys: ['name','value']
-      },
-      templates: { tag: tagTemplate, dropdownItem: dropdownItemTemplate },
-      whitelist: this.baseWhitelist
-    });
+   this.tagify = new window.Tagify(input, {
+  enforceWhitelist: false,
+  skipInvalid: true,
+  addTagOnBlur: false,
+  pasteAsTags: false,
+  delimiters: null,
+  tagTextProp: 'name',
+  dropdown: {
+    enabled: 0,
+    closeOnSelect: false,
+    maxItems: 50,
+    fuzzySearch: true,
+    highlightFirst: true,
+    searchKeys: ['name','value'],
+
+    // NEW: keep dropdown inside the shadow root so it’s visible & styled
+    appendTarget: this.root
+  },
+  templates: { tag: tagTemplate, dropdownItem: dropdownItemTemplate },
+  whitelist: this.baseWhitelist
+});
 
     // grouped dropdown renderer
     this.tagify.dropdown.createListHTML = (suggestionsList) => {
@@ -256,6 +259,11 @@ class ApeloTagify extends HTMLElement {
       this.refreshWhitelist(q, { show:true });
       this.dispatchEvent(new CustomEvent('inputChange', { detail: { query:q }, bubbles:true }));
     });
+      
+      this.tagify.on('focus', () => {
+  const q = (this.tagify.DOM.input.textContent || '').trim();
+  this.refreshWhitelist(q, { show: true });
+});
 
     this.tagify.DOM.input.addEventListener('paste', (e) => {
       e.preventDefault();
